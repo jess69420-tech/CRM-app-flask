@@ -5,9 +5,11 @@ from datetime import datetime
 import os
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+DB_PATH = os.path.join(BASE_DIR, 'data.db')  # store database directly in project folder
+
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'devsecret123')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(BASE_DIR, 'instance', 'data.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + DB_PATH
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -46,8 +48,6 @@ class Comment(db.Model):
     author = db.relationship('User', foreign_keys=[author_id])
 
 def init_db_and_admin():
-    instance_dir = os.path.join(BASE_DIR, 'instance')
-    os.makedirs(instance_dir, exist_ok=True)
     db.create_all()
     admin_username = 'jess69420'
     admin_password = 'jasser/1998J'
@@ -202,5 +202,6 @@ def edit_client(client_id):
     return render_template('edit_client.html', client=client, agents=agents)
 
 if __name__ == '__main__':
-    init_db_and_admin()
+    with app.app_context():
+        init_db_and_admin()
     app.run(debug=True, host='0.0.0.0', port=5000)
