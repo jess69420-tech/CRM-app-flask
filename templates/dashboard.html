@@ -7,7 +7,11 @@
   </div>
   <hr>
   {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for cat, msg in messages %}<div class="alert alert-{{cat}}">{{msg}}</div>{% endfor %}{% endif %}{% endwith %}
-  {% if g.user.role == 'admin' %}<a class="btn btn-success mb-3" href="{{ url_for('add_client') }}">Add Client</a>{% endif %}
+  {% if g.user.role == 'admin' %}
+  <a class="btn btn-success mb-3" href="{{ url_for('add_client') }}">Add Client</a>
+  <a href="{{ url_for('add_client') }}" class="btn btn-success">Add Client</a>
+<a href="{{ url_for('upload_clients') }}" class="btn btn-info">Bulk Upload Clients</a>
+{% endif %}
   <table class="table table-striped table-sm"><thead><tr><th>Name</th><th>Status</th><th>Last Contact</th><th>Assigned Agent</th><th>Actions</th></tr></thead><tbody>
   {% for c in clients %}
   <tr><td>{{ c.name }}</td><td>{{ c.status }}</td><td>{{ c.last_contact_date.strftime('%Y-%m-%d %H:%M') if c.last_contact_date else '' }}</td><td>{{ c.assigned_agent.username if c.assigned_agent else '' }}</td>
