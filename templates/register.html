@@ -1,1 +1,38 @@
+```html
+<!-- login.html -->
+{% extends 'layout.html' %}
+{% block content %}
+<h1>Login</h1>
+<form method="post">
+  <div class="mb-3">
+    <label class="form-label">Username</label>
+    <input class="form-control" name="username">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Password</label>
+    <input class="form-control" name="password" type="password">
+  </div>
+  <button class="btn btn-primary" type="submit">Login</button>
+  <a class="btn btn-link" href="{{ url_for('register') }}">Register</a>
+</form>
+{% endblock %}
+
+<!-- register.html -->
+{% extends 'layout.html' %}
+{% block content %}
+<h1>Register</h1>
+<form method="post">
+  <div class="mb-3">
+    <label class="form-label">Username</label>
+    <input class="form-control" name="username">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Password</label>
+    <input class="form-control" name="password" type="password">
+  </div>
+  <button class="btn btn-primary" type="submit">Register</button>
+  <a class="btn btn-link" href="{{ url_for('login') }}">Login</a>
+</form>
+{% endblock %}
+```
 
