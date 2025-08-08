@@ -1,1 +1,74 @@
 
+
+```html
+{% extends 'layout.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1>Contacts</h1>
+  <div>
+    <a class="btn btn-secondary" href="{{ url_for('export_csv') }}">Export</a>
+    <a class="btn btn-outline-danger" href="{{ url_for('clear_all') }}" onclick="return confirm('Delete all your contacts?')">Delete All</a>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data">
+      <div class="mb-3">
+        <input class="form-control" type="file" name="file" accept=".csv" required>
+      </div>
+      <button class="btn btn-primary" type="submit">Upload CSV</button>
+    </form>
+  </div>
+</div>
+
+<form class="mb-3" method="get">
+  <div class="input-group">
+    <input type="search" name="q" class="form-control" placeholder="Search..." value="{{ request.args.get('q','') }}">
+    <button class="btn btn-outline-primary" type="submit">Search</button>
+  </div>
+</form>
+
+<div class="table-responsive">
+  <table class="table table-sm table-striped">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Name</th>
+        <th>Wallet</th>
+        <th>Full Name</th>
+        <th>Email</th>
+        <th>Phone</th>
+        <th>Tags</th>
+        <th>Notes</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ r['name'] }}</td>
+        <td style="max-width:200px;overflow:auto;">{{ r['wallet'] }}</td>
+        <td>{{ r['fullname'] }}</td>
+        <td>{{ r['email'] }}</td>
+        <td>{{ r['phone'] }}</td>
+        <td>{{ r['tags'] }}</td>
+        <td>{{ r['notes'] }}</td>
+        <td>
+          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('edit', cid=r['id']) }}">Edit</a>
+          <a class="btn btn-sm btn-outline-danger" href="{{ url_for('delete', cid=r['id']) }}" onclick="return confirm('Delete this contact?')">Delete</a>
+          {% if r['phone'] and r['phone']!='N/A' %}
+          <a class="btn btn-sm btn-success" href="sip:{{ r['phone'] }}@microsiptwilio.sip.twilio.com">Call</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}
+```
+
+---
