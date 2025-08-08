@@ -2,22 +2,18 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
-from sqlalchemy import inspect
 import os
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-INSTANCE_DIR = os.path.join(BASE_DIR, 'instance')
-os.makedirs(INSTANCE_DIR, exist_ok=True)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'devsecret123')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(INSTANCE_DIR, 'data.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(BASE_DIR, 'instance', 'data.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# ------------------ MODELS ------------------
-
+# ------------------- MODELS -------------------
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -51,42 +47,33 @@ class Comment(db.Model):
     client = db.relationship('Client', backref='comments', foreign_keys=[client_id])
     author = db.relationship('User', foreign_keys=[author_id])
 
-# ------------------ DB INIT ------------------
-
-def ensure_tables():
-    """Ensure all tables exist before running the app."""
-    inspector = inspect(db.engine)
-    required_tables = ['user', 'client', 'comment']
-    existing_tables = inspector.get_table_names()
-
-    if not all(table in existing_tables for table in required_tables):
-        print("Database tables missing — creating...")
-        db.create_all()
-        print("Database initialized.")
-
+# ------------------- INITIAL SETUP -------------------
 def init_db_and_admin():
-    ensure_tables()
+    instance_dir = os.path.join(BASE_DIR, 'instance')
+    os.makedirs(instance_dir, exist_ok=True)
+    
+    db.create_all()
+    
     admin_username = 'jess69420'
     admin_password = 'jasser/1998J'
+    
     admin = User.query.filter_by(username=admin_username).first()
     if not admin:
         admin = User(username=admin_username, role='admin')
         admin.set_password(admin_password)
         db.session.add(admin)
         db.session.commit()
-        print('Admin user created')
+        print('✅ Admin user created')
 
-@app.before_first_request
-def setup():
+with app.app_context():
     init_db_and_admin()
 
+# ------------------- AUTH HELPERS -------------------
 @app.before_request
 def load_logged_in_user():
     g.user = None
     if 'user_id' in session:
         g.user = User.query.get(session['user_id'])
-
-# ------------------ AUTH DECORATORS ------------------
 
 def login_required(func):
     from functools import wraps
@@ -107,8 +94,7 @@ def admin_required(func):
         return func(*args, **kwargs)
     return wrapper
 
-# ------------------ ROUTES ------------------
-
+# ------------------- ROUTES -------------------
 @app.route('/')
 def index():
     if g.user:
@@ -226,8 +212,6 @@ def edit_client(client_id):
     agents = User.query.filter_by(role='agent').all()
     return render_template('edit_client.html', client=client, agents=agents)
 
-# ------------------ RUN APP ------------------
-
+# ------------------- RUN -------------------
 if __name__ == '__main__':
-    init_db_and_admin()
     app.run(debug=True, host='0.0.0.0', port=5000)
