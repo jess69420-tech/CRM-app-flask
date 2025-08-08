@@ -1,0 +1,10 @@
+<!doctype html>
+<title>Add client</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+<div class="container mt-4"><h3>Add client</h3><form method="post">
+<div class="form-group"><label>Name</label><input name="name" class="form-control" required></div>
+<div class="form-group"><label>Wallet</label><input name="wallet" class="form-control"></div>
+<div class="form-group"><label>Full name</label><input name="full_name" class="form-control"></div>
+<div class="form-group"><label>Email</label><input name="email" class="form-control"></div>
+<div class="form-group"><label>Phone</label><input name="phone" class="form-control"></div>
+<div class="form-group"><label>Assign to agent</label><select name="assigned_agent" class="form-control"><option value="">(none)</option>{% for a in agents %}<option value="{{a.id}}">{{a.username}}</option>{% endfor %}</select></div><button class="btn btn-primary">Add</button></form></div>
