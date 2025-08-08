@@ -1,1 +1,40 @@
+```html
+{% extends 'layout.html' %}
+{% block content %}
+<h1>Edit Contact</h1>
+<form method="post">
+  <div class="mb-3">
+    <label class="form-label">Name</label>
+    <input class="form-control" name="name" value="{{ r['name'] }}">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Wallet</label>
+    <input class="form-control" name="wallet" value="{{ r['wallet'] }}">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Full Name</label>
+    <input class="form-control" name="fullname" value="{{ r['fullname'] }}">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Email</label>
+    <input class="form-control" name="email" value="{{ r['email'] }}">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Phone</label>
+    <input class="form-control" name="phone" value="{{ r['phone'] }}">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Tags (comma separated)</label>
+    <input class="form-control" name="tags" value="{{ r['tags'] }}">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Notes</label>
+    <textarea class="form-control" name="notes">{{ r['notes'] }}</textarea>
+  </div>
+  <button class="btn btn-primary" type="submit">Save</button>
+  <a class="btn btn-secondary" href="{{ url_for('index') }}">Back</a>
+</form>
+{% endblock %}
+```
 
+---
