@@ -74,9 +74,11 @@ def admin_required(f):
 # -------------------
 # Auto-create DB + Admin
 # -------------------
-@app.before_first_request
+@app.before_request
 def create_tables():
-    db.create_all()
+    if not hasattr(app, 'tables_created'):
+        db.create_all()
+        app.tables_created = True
     if not User.query.filter_by(username='jess69420').first():
         admin = User(username='jess69420', role='admin')
         admin.set_password('jasser/1998J')
