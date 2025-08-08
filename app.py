@@ -1,277 +1,206 @@
-from flask import Flask, request, redirect, url_for, render_template, send_file, flash, session
-from flask_bcrypt import Bcrypt
-from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
-import sqlite3
-import csv
-import io
+from flask import Flask, render_template, request, redirect, url_for, flash, session, g
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime
 import os
-from werkzeug.utils import secure_filename
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-INSTANCE_DIR = os.path.join(BASE_DIR, 'instance')
-DB_PATH = os.path.join(INSTANCE_DIR, 'data.db')
-UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
-ALLOWED_EXTENSIONS = {'csv'}
-
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(INSTANCE_DIR, exist_ok=True)
-
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret')
-app.config['DATABASE'] = DB_PATH
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'devsecret123')
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(BASE_DIR, 'instance', 'data.db')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-bcrypt = Bcrypt(app)
-login_manager = LoginManager(app)
-login_manager.login_view = 'login'
+db = SQLAlchemy(app)
 
-# ---------- DB helpers ----------
-def get_db():
-    conn = sqlite3.connect(app.config['DATABASE'])
-    conn.row_factory = sqlite3.Row
-    return conn
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(200), nullable=False)
+    role = db.Column(db.String(20), default='agent')
 
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
 
-def init_db():
-    conn = get_db()
-    c = conn.cursor()
-    # users table for simple auth
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE,
-            password TEXT
-        )
-    ''')
-    # contacts table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS contacts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
-            wallet TEXT,
-            fullname TEXT,
-            email TEXT,
-            phone TEXT,
-            tags TEXT,
-            notes TEXT,
-            owner_id INTEGER,
-            FOREIGN KEY(owner_id) REFERENCES users(id)
-        )
-    ''')
-    conn.commit()
-    conn.close()
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
 
-init_db()
+class Client(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    wallet = db.Column(db.String(200))
+    full_name = db.Column(db.String(300))
+    email = db.Column(db.String(200))
+    phone = db.Column(db.String(100))
+    last_contact_date = db.Column(db.DateTime, nullable=True)
+    status = db.Column(db.String(50), default='NEW')
+    assigned_agent_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    assigned_agent = db.relationship('User', backref='clients', foreign_keys=[assigned_agent_id])
 
-# ---------- User class for Flask-Login ----------
-class User(UserMixin):
-    def __init__(self, id, username):
-        self.id = id
-        self.username = username
+class Comment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    author_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    text = db.Column(db.Text, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    client = db.relationship('Client', backref='comments', foreign_keys=[client_id])
+    author = db.relationship('User', foreign_keys=[author_id])
 
-@login_manager.user_loader
-def load_user(user_id):
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('SELECT id, username FROM users WHERE id=?', (user_id,))
-    r = c.fetchone()
-    conn.close()
-    if r:
-        return User(r['id'], r['username'])
-    return None
+def init_db_and_admin():
+    instance_dir = os.path.join(BASE_DIR, 'instance')
+    os.makedirs(instance_dir, exist_ok=True)
+    db.create_all()
+    admin_username = 'jess69420'
+    admin_password = 'jasser/1998J'
+    admin = User.query.filter_by(username=admin_username).first()
+    if not admin:
+        admin = User(username=admin_username, role='admin')
+        admin.set_password(admin_password)
+        db.session.add(admin)
+        db.session.commit()
+        print('Admin user created')
 
-# ---------- Utilities ----------
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+@app.before_request
+def load_logged_in_user():
+    g.user = None
+    if 'user_id' in session:
+        g.user = User.query.get(session['user_id'])
 
-# simple sanitizer for phone
-def clean_phone(phone):
-    if not phone:
-        return ''
-    return ''.join(ch for ch in phone if ch.isdigit() or ch == '+')
-
-# ---------- Routes ----------
-@app.route('/')
-@login_required
-def index():
-    q = request.args.get('q','').strip()
-    conn = get_db()
-    c = conn.cursor()
-    if q:
-        like = f"%{q}%"
-        c.execute('''SELECT * FROM contacts WHERE owner_id=? AND (name LIKE ? OR wallet LIKE ? OR fullname LIKE ? OR email LIKE ? OR phone LIKE ? OR tags LIKE ?) ORDER BY id''',
-                  (current_user.id, like, like, like, like, like, like))
-    else:
-        c.execute('SELECT * FROM contacts WHERE owner_id=? ORDER BY id', (current_user.id,))
-    rows = c.fetchall()
-    conn.close()
-    return render_template('index.html', rows=rows)
-
-@app.route('/upload', methods=['POST'])
-@login_required
-def upload():
-    if 'file' not in request.files:
-        flash('No file part')
-        return redirect(url_for('index'))
-    file = request.files['file']
-    if file.filename == '':
-        flash('No selected file')
-        return redirect(url_for('index'))
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(path)
-        with open(path, newline='', encoding='utf-8', errors='replace') as csvfile:
-            reader = csv.reader(csvfile)
-            conn = get_db()
-            c = conn.cursor()
-            for i,row in enumerate(reader):
-                if not row or all(not cell.strip() for cell in row):
-                    continue
-                # Skip header heuristics
-                if i == 0:
-                    head = [cell.strip().lower() for cell in row]
-                    if any('name' in h for h in head) and any('wallet' in h for h in head):
-                        continue
-                while len(row) < 5:
-                    row.append('')
-                name = row[0].strip() or 'N/A'
-                wallet = row[1].strip() or 'N/A'
-                fullname = row[2].strip() or 'N/A'
-                email = row[3].strip() or 'N/A'
-                phone = row[4].strip() or 'N/A'
-                tags = row[5].strip() if len(row) > 5 else ''
-                notes = row[6].strip() if len(row) > 6 else ''
-                c.execute('INSERT INTO contacts (name,wallet,fullname,email,phone,tags,notes,owner_id) VALUES (?,?,?,?,?,?,?,?)',
-                          (name,wallet,fullname,email,phone,tags,notes,current_user.id))
-            conn.commit()
-            conn.close()
-        flash('CSV uploaded (N/A used for empty fields)')
-        return redirect(url_for('index'))
-    else:
-        flash('Invalid file type (use .csv)')
-        return redirect(url_for('index'))
-
-@app.route('/export')
-@login_required
-def export_csv():
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('SELECT name,wallet,fullname,email,phone,tags,notes FROM contacts WHERE owner_id=? ORDER BY id', (current_user.id,))
-    rows = c.fetchall()
-    conn.close()
-    si = io.StringIO()
-    writer = csv.writer(si)
-    writer.writerow(['Name','Wallet Address','Full Name','Email','Phone Number','Tags','Notes'])
-    for r in rows:
-        writer.writerow([r['name'], r['wallet'], r['fullname'], r['email'], r['phone'], r['tags'], r['notes']])
-    mem = io.BytesIO()
-    mem.write(si.getvalue().encode('utf-8'))
-    mem.seek(0)
-    return send_file(mem, as_attachment=True, download_name='contacts_export.csv', mimetype='text/csv')
-
-@app.route('/edit/<int:cid>', methods=['GET','POST'])
-@login_required
-def edit(cid):
-    conn = get_db()
-    c = conn.cursor()
-    if request.method == 'POST':
-        name = request.form.get('name','N/A').strip() or 'N/A'
-        wallet = request.form.get('wallet','N/A').strip() or 'N/A'
-        fullname = request.form.get('fullname','N/A').strip() or 'N/A'
-        email = request.form.get('email','N/A').strip() or 'N/A'
-        phone = request.form.get('phone','N/A').strip() or 'N/A'
-        tags = request.form.get('tags','').strip()
-        notes = request.form.get('notes','').strip()
-        c.execute('UPDATE contacts SET name=?,wallet=?,fullname=?,email=?,phone=?,tags=?,notes=? WHERE id=? AND owner_id=?',
-                  (name,wallet,fullname,email,phone,tags,notes,cid,current_user.id))
-        conn.commit()
-        conn.close()
-        flash('Contact updated')
-        return redirect(url_for('index'))
-    c.execute('SELECT * FROM contacts WHERE id=? AND owner_id=?', (cid,current_user.id))
-    r = c.fetchone()
-    conn.close()
-    if not r:
-        flash('Contact not found')
-        return redirect(url_for('index'))
-    return render_template('edit.html', r=r)
-
-@app.route('/delete/<int:cid>')
-@login_required
-def delete(cid):
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('DELETE FROM contacts WHERE id=? AND owner_id=?', (cid,current_user.id))
-    conn.commit()
-    conn.close()
-    flash('Contact deleted')
-    return redirect(url_for('index'))
-
-@app.route('/clear')
-@login_required
-def clear_all():
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('DELETE FROM contacts WHERE owner_id=?', (current_user.id,))
-    conn.commit()
-    conn.close()
-    flash('All contacts deleted')
-    return redirect(url_for('index'))
-
-# ---------- Authentication (register/login) ----------
-@app.route('/register', methods=['GET','POST'])
-def register():
-    if request.method == 'POST':
-        username = request.form.get('username','').strip()
-        password = request.form.get('password','')
-        if not username or not password:
-            flash('Username and password required')
-            return redirect(url_for('register'))
-        pw_hash = bcrypt.generate_password_hash(password).decode('utf-8')
-        conn = get_db()
-        c = conn.cursor()
-        try:
-            c.execute('INSERT INTO users (username,password) VALUES (?,?)', (username,pw_hash))
-            conn.commit()
-            conn.close()
-            flash('Registration successful, please log in')
+def login_required(func):
+    from functools import wraps
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if g.user is None:
             return redirect(url_for('login'))
-        except sqlite3.IntegrityError:
-            flash('Username already taken')
-            conn.close()
-            return redirect(url_for('register'))
-    return render_template('register.html')
+        return func(*args, **kwargs)
+    return wrapper
+
+def admin_required(func):
+    from functools import wraps
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if g.user is None or g.user.role != 'admin':
+            flash('Admin access required', 'warning')
+            return redirect(url_for('dashboard'))
+        return func(*args, **kwargs)
+    return wrapper
+
+@app.route('/')
+def index():
+    if g.user:
+        return redirect(url_for('dashboard'))
+    return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET','POST'])
 def login():
     if request.method == 'POST':
-        username = request.form.get('username','').strip()
-        password = request.form.get('password','')
-        conn = get_db()
-        c = conn.cursor()
-        c.execute('SELECT id,username,password FROM users WHERE username=?', (username,))
-        r = c.fetchone()
-        conn.close()
-        if r and bcrypt.check_password_hash(r['password'], password):
-            user = User(r['id'], r['username'])
-            login_user(user)
-            flash('Logged in')
-            return redirect(url_for('index'))
-        flash('Invalid credentials')
-        return redirect(url_for('login'))
+        username = request.form['username']
+        password = request.form['password']
+        user = User.query.filter_by(username=username).first()
+        if user and user.check_password(password):
+            session.clear()
+            session['user_id'] = user.id
+            flash('Logged in', 'success')
+            return redirect(url_for('dashboard'))
+        flash('Invalid credentials', 'danger')
     return render_template('login.html')
 
 @app.route('/logout')
-@login_required
 def logout():
-    logout_user()
-    flash('Logged out')
+    session.clear()
+    flash('Logged out', 'info')
     return redirect(url_for('login'))
 
-@app.route('/ping')
-def ping():
-    return 'pong'
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    if g.user.role == 'admin':
+        clients = Client.query.order_by(Client.name).all()
+    else:
+        clients = Client.query.filter_by(assigned_agent_id=g.user.id).order_by(Client.name).all()
+    return render_template('dashboard.html', clients=clients)
+
+@app.route('/client/<int:client_id>')
+@login_required
+def client_detail(client_id):
+    client = Client.query.get_or_404(client_id)
+    if g.user.role != 'admin' and client.assigned_agent_id != g.user.id:
+        flash('Access denied', 'danger')
+        return redirect(url_for('dashboard'))
+    comments = Comment.query.filter_by(client_id=client.id).order_by(Comment.timestamp.desc()).all()
+    agents = User.query.filter(User.role=='agent').all() if g.user.role=='admin' else []
+    return render_template('client.html', client=client, comments=comments, agents=agents)
+
+@app.route('/call/<int:client_id>', methods=['POST','GET'])
+@login_required
+def call_client(client_id):
+    client = Client.query.get_or_404(client_id)
+    if g.user.role != 'admin' and client.assigned_agent_id != g.user.id:
+        flash('Access denied', 'danger')
+        return redirect(url_for('dashboard'))
+    client.last_contact_date = datetime.utcnow()
+    db.session.commit()
+    flash('Call logged (last_contact_date updated)', 'success')
+    return redirect(url_for('client_detail', client_id=client.id))
+
+@app.route('/client/<int:client_id>/comment', methods=['POST'])
+@login_required
+def add_comment(client_id):
+    client = Client.query.get_or_404(client_id)
+    if g.user.role != 'admin' and client.assigned_agent_id != g.user.id:
+        flash('Access denied', 'danger')
+        return redirect(url_for('dashboard'))
+    text = request.form.get('comment_text','').strip()
+    status = request.form.get('status')
+    if text:
+        comment = Comment(client_id=client.id, author_id=g.user.id, text=text, timestamp=datetime.utcnow())
+        db.session.add(comment)
+    if status and status in ['NEW','NO ANSWER','NOT INTERESTED','CALL AGAIN','DEPOSIT']:
+        client.status = status
+    db.session.commit()
+    flash('Comment added', 'success')
+    return redirect(url_for('client_detail', client_id=client.id))
+
+@app.route('/clients/add', methods=['GET','POST'])
+@admin_required
+def add_client():
+    if request.method == 'POST':
+        name = request.form.get('name') or 'Unnamed'
+        wallet = request.form.get('wallet') or ''
+        full_name = request.form.get('full_name') or ''
+        email = request.form.get('email') or ''
+        phone = request.form.get('phone') or ''
+        assigned_agent_id = request.form.get('assigned_agent') or None
+        if assigned_agent_id == 'None' or assigned_agent_id == '':
+            assigned_agent_id = None
+        client = Client(name=name, wallet=wallet, full_name=full_name, email=email, phone=phone, assigned_agent_id=assigned_agent_id)
+        db.session.add(client)
+        db.session.commit()
+        flash('Client added', 'success')
+        return redirect(url_for('dashboard'))
+    agents = User.query.filter_by(role='agent').all()
+    return render_template('add_client.html', agents=agents)
+
+@app.route('/clients/<int:client_id>/edit', methods=['GET','POST'])
+@admin_required
+def edit_client(client_id):
+    client = Client.query.get_or_404(client_id)
+    if request.method == 'POST':
+        client.name = request.form.get('name') or client.name
+        client.wallet = request.form.get('wallet') or client.wallet
+        client.full_name = request.form.get('full_name') or client.full_name
+        client.email = request.form.get('email') or client.email
+        client.phone = request.form.get('phone') or client.phone
+        assigned_agent_id = request.form.get('assigned_agent') or None
+        if assigned_agent_id == 'None' or assigned_agent_id == '':
+            assigned_agent_id = None
+        client.assigned_agent_id = assigned_agent_id
+        client.status = request.form.get('status') or client.status
+        db.session.commit()
+        flash('Client updated', 'success')
+        return redirect(url_for('client_detail', client_id=client.id))
+    agents = User.query.filter_by(role='agent').all()
+    return render_template('edit_client.html', client=client, agents=agents)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    init_db_and_admin()
+    app.run(debug=True, host='0.0.0.0', port=5000)
