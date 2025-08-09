@@ -7,9 +7,20 @@ from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 
+# -------------------
+# App setup
+# -------------------
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'devsecret123')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///instance/data.db'
+
+# Ensure instance folder exists
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+INSTANCE_DIR = os.path.join(BASE_DIR, 'instance')
+os.makedirs(INSTANCE_DIR, exist_ok=True)
+
+# Use absolute path for SQLite
+DB_PATH = os.path.join(INSTANCE_DIR, 'data.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{DB_PATH}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -72,13 +83,10 @@ def admin_required(f):
     return decorated_function
 
 # -------------------
-# Auto-create DB + Admin
+# DB init
 # -------------------
-@app.before_request
-def create_tables():
-    if not hasattr(app, 'tables_created'):
-        db.create_all()
-        app.tables_created = True
+with app.app_context():
+    db.create_all()
     if not User.query.filter_by(username='jess69420').first():
         admin = User(username='jess69420', role='admin')
         admin.set_password('jasser/1998J')
