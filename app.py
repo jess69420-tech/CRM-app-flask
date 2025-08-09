@@ -1,54 +1,61 @@
 import os
 import csv
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, flash, session, g
 from werkzeug.utils import secure_filename
 from functools import wraps
 from models import db, User, Client
 
-# --- Flask App Setup ---
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'yoursecretkey'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///instance/data.db'
-app.config['UPLOAD_FOLDER'] = os.path.join(os.getcwd(), 'uploads')
 
-# Make sure uploads folder exists
+# Ensure instance folder exists (writable in Render)
+os.makedirs(app.instance_path, exist_ok=True)
+
+app.config['SECRET_KEY'] = 'yoursecretkey'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(app.instance_path, 'data.db')
+app.config['UPLOAD_FOLDER'] = os.path.join(app.instance_path, 'uploads')
+
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 db.init_app(app)
 
-# --- Authentication Decorator ---
+# -------------------------
+# Authentication decorator
+# -------------------------
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
-            flash('Please log in first.', 'warning')
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
 
-# --- Routes ---
-@app.route('/')
-def index():
-    return redirect(url_for('dashboard'))
+# -------------------------
+# Routes
+# -------------------------
+@app.before_request
+def load_logged_in_user():
+    user_id = session.get('user_id')
+    if user_id is None:
+        g.user = None
+    else:
+        g.user = User.query.get(user_id)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        email = request.form['email']
+        username = request.form['username']
         password = request.form['password']
-        user = User.query.filter_by(email=email).first()
-        if user and user.check_password(password):
+        user = User.query.filter_by(username=username, password=password).first()
+        if user:
             session['user_id'] = user.id
-            flash('Logged in successfully', 'success')
             return redirect(url_for('dashboard'))
         else:
-            flash('Invalid credentials', 'danger')
+            flash('Invalid credentials')
     return render_template('login.html')
 
 @app.route('/logout')
 def logout():
-    session.pop('user_id', None)
-    flash('Logged out successfully', 'info')
+    session.clear()
     return redirect(url_for('login'))
 
 @app.route('/dashboard')
@@ -57,50 +64,59 @@ def dashboard():
     clients = Client.query.all()
     return render_template('dashboard.html', clients=clients)
 
-@app.route('/add_client', methods=['GET', 'POST'])
+@app.route('/add_client', methods=['POST'])
 @login_required
 def add_client():
-    if request.method == 'POST':
-        name = request.form['name']
-        email = request.form['email']
-        phone = request.form.get('phone', '')
-        new_client = Client(name=name, email=email, phone=phone)
-        db.session.add(new_client)
-        db.session.commit()
-        flash('Client added successfully', 'success')
-        return redirect(url_for('dashboard'))
-    return render_template('add_client.html')
+    name = request.form['name']
+    email = request.form['email']
+    phone = request.form['phone']
+    client = Client(name=name, email=email, phone=phone)
+    db.session.add(client)
+    db.session.commit()
+    flash('Client added successfully')
+    return redirect(url_for('dashboard'))
 
-@app.route('/upload_clients', methods=['GET', 'POST'])
+@app.route('/upload_clients', methods=['POST'])
 @login_required
 def upload_clients():
-    if request.method == 'POST':
-        file = request.files.get('file')
-        if file and file.filename.endswith('.csv'):
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(file.filename))
-            file.save(filepath)
+    if 'file' not in request.files:
+        flash('No file part')
+        return redirect(url_for('dashboard'))
 
-            added_count = 0
-            with open(filepath, newline='', encoding='utf-8-sig') as csvfile:
-                reader = csv.DictReader(csvfile)
-                for row in reader:
-                    normalized_row = {k.strip().lower(): v.strip() for k, v in row.items() if k}
-                    if normalized_row.get('name') and normalized_row.get('email'):
-                        client = Client(
-                            name=normalized_row['name'],
-                            email=normalized_row['email'],
-                            phone=normalized_row.get('phone', '')
-                        )
-                        db.session.add(client)
-                        added_count += 1
+    file = request.files['file']
+    if file.filename == '':
+        flash('No selected file')
+        return redirect(url_for('dashboard'))
 
-                db.session.commit()
+    if file and file.filename.endswith('.csv'):
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(file.filename))
+        file.save(filepath)
 
-            flash(f'{added_count} clients uploaded successfully!', 'success')
-            return redirect(url_for('dashboard'))
-        else:
-            flash('Please upload a valid CSV file', 'danger')
-    return render_template('upload_clients.html')
+        with open(filepath, newline='', encoding='utf-8') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                if row.get('name') and row.get('email'):
+                    client = Client(
+                        name=row['name'].strip(),
+                        email=row['email'].strip(),
+                        phone=row.get('phone', '').strip()
+                    )
+                    db.session.add(client)
+
+        db.session.commit()
+        flash('Clients uploaded successfully')
+    else:
+        flash('Invalid file format. Please upload a CSV file.')
+
+    return redirect(url_for('dashboard'))
+
+# -------------------------
+# CLI to init DB
+# -------------------------
+@app.cli.command('init-db')
+def init_db():
+    db.create_all()
+    print('Database initialized.')
 
 if __name__ == '__main__':
     with app.app_context():
