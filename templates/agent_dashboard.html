@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Agent Dashboard</title>
+</head>
+<body>
+    <h1>Welcome, Agent!</h1>
+
+    <h2>Clients List</h2>
+    <table border="1">
+        <tr>
+            <th>Name</th>
+            <th>Email</th>
+        </tr>
+        {% for client in clients %}
+        <tr>
+            <td>{{ client.name if client.name else client['name'] }}</td>
+            <td>{{ client.email if client.email else client['email'] }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <br>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</body>
+</html>
