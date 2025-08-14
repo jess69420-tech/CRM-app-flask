@@ -2,38 +2,43 @@
 <html>
 <head>
     <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-    <h1>Welcome, Admin!</h1>
+    <h1>Welcome, Admin</h1>
 
-    <h2>Upload Clients CSV</h2>
-    <form action="{{ url_for('upload_clients') }}" method="post" enctype="multipart/form-data">
-        <input type="file" name="file" required>
-        <button type="submit">Upload</button>
-    </form>
-
-    <h2>Add Client Manually</h2>
-    <form action="{{ url_for('add_client') }}" method="post">
-        <input type="text" name="name" placeholder="Client Name" required>
-        <input type="email" name="email" placeholder="Client Email" required>
-        <button type="submit">Add</button>
-    </form>
-
-    <h2>Clients List</h2>
-    <table border="1">
-        <tr>
-            <th>Name</th>
-            <th>Email</th>
-        </tr>
-        {% for client in clients %}
-        <tr>
-            <td>{{ client.name if client.name else client['name'] }}</td>
-            <td>{{ client.email if client.email else client['email'] }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-
-    <br>
     <a href="{{ url_for('logout') }}">Logout</a>
+
+    <h2>Clients</h2>
+    <form method="POST" action="{{ url_for('add_client') }}">
+        <input type="text" name="name" placeholder="Name" required>
+        <input type="email" name="email" placeholder="Email" required>
+        <input type="text" name="phone" placeholder="Phone">
+        <button type="submit">Add Client</button>
+    </form>
+
+    <form method="POST" action="{{ url_for('import_clients') }}" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".csv" required>
+        <button type="submit">Import Clients (CSV)</button>
+    </form>
+
+    <ul>
+        {% for client in clients %}
+            <li>{{ client.name }} - {{ client.email }} - {{ client.phone }}</li>
+        {% endfor %}
+    </ul>
+
+    <h2>Create Agent</h2>
+    <form method="POST" action="{{ url_for('create_agent') }}">
+        <input type="text" name="username" placeholder="Agent Username" required>
+        <button type="submit">Create Agent</button>
+    </form>
+
+    <h3>Existing Agents</h3>
+    <ul>
+        {% for agent in agents %}
+            <li>{{ agent.username }}</li>
+        {% endfor %}
+    </ul>
 </body>
 </html>
