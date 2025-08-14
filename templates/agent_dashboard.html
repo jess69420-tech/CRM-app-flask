@@ -2,25 +2,21 @@
 <html>
 <head>
     <title>Agent Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
-    <h1>Welcome, Agent!</h1>
+<body class="agent-dashboard">
+    <header>
+        <h1>Welcome, Agent</h1>
+        <a href="{{ url_for('logout') }}" class="btn btn-danger">Logout</a>
+    </header>
 
-    <h2>Clients List</h2>
-    <table border="1">
-        <tr>
-            <th>Name</th>
-            <th>Email</th>
-        </tr>
-        {% for client in clients %}
-        <tr>
-            <td>{{ client.name if client.name else client['name'] }}</td>
-            <td>{{ client.email if client.email else client['email'] }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-
-    <br>
-    <a href="{{ url_for('logout') }}">Logout</a>
+    <section class="dashboard-section">
+        <h2>Clients</h2>
+        <ul class="client-list">
+            {% for client in clients %}
+                <li>{{ client.name }} - {{ client.email }} - {{ client.phone }}</li>
+            {% endfor %}
+        </ul>
+    </section>
 </body>
 </html>
