@@ -21,7 +21,7 @@ db = SQLAlchemy(app)
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password = db.Column(db.String(120), nullable=False)  # this is the missing column
+    password = db.Column(db.String(120), nullable=False)
     role = db.Column(db.String(20), nullable=False)
 
 # ======================
@@ -37,7 +37,8 @@ def check_and_reset_db():
 
         if "password" not in columns:
             print("⚠ Missing 'password' column in 'user' table. Resetting database...")
-            os.remove(DB_PATH)
+            if os.path.exists(DB_PATH):
+                os.remove(DB_PATH)
             return True
     except sqlite3.Error as e:
         print(f"Database error: {e}. Resetting database...")
@@ -46,10 +47,18 @@ def check_and_reset_db():
         return True
     return False
 
-if check_and_reset_db():
-    print("✅ Database was reset and will be recreated now.")
+with app.app_context():
+    if check_and_reset_db():
+        print("✅ Database was reset and will be recreated now.")
 
-db.create_all()
+    db.create_all()
+
+    # Auto-create admin user if not exists
+    if not User.query.filter_by(username="admin").first():
+        admin = User(username="admin", password="admin123", role="admin")
+        db.session.add(admin)
+        db.session.commit()
+        print("✅ Default admin created (username: admin, password: admin123)")
 
 # ======================
 # ROUTES
@@ -82,8 +91,5 @@ def logout():
     session.clear()
     return redirect(url_for("login"))
 
-# ======================
-# RUN APP
-# ======================
 if __name__ == "__main__":
     app.run(debug=True)
