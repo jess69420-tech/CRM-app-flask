@@ -2,114 +2,105 @@ import os
 import csv
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from werkzeug.utils import secure_filename
-from functools import wraps
-from models import db, User, Client
 
-# Create app and point to instance folder (writable on Render)
-app = Flask(__name__, instance_relative_config=True)
-
-# Ensure the instance folder exists
-os.makedirs(app.instance_path, exist_ok=True)
-
-# Config
+app = Flask(__name__)
 app.config['SECRET_KEY'] = 'yoursecretkey'
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(app.instance_path, 'data.db')}"
-app.config['UPLOAD_FOLDER'] = os.path.join(app.instance_path, 'uploads')
+app.config['UPLOAD_FOLDER'] = os.path.join(os.getcwd(), 'uploads')
 
 # Ensure uploads folder exists
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+if not os.path.exists(app.config['UPLOAD_FOLDER']):
+    os.makedirs(app.config['UPLOAD_FOLDER'])
 
-db.init_app(app)
+# Hardcoded admin credentials
+ADMIN_USERNAME = "jess69420"
+ADMIN_PASSWORD = "jasser/1998J"
 
-# ---------- AUTH DECORATOR ----------
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if "user_id" not in session:
-            return redirect(url_for("login"))
-        return f(*args, **kwargs)
-    return decorated_function
+# Dummy client list for testing
+clients = []
 
-# ---------- ROUTES ----------
-@app.route("/")
-@login_required
-def index():
-    clients = Client.query.all()
-    return render_template("dashboard.html", clients=clients)
-
-@app.route("/login", methods=["GET", "POST"])
+# Login route
+@app.route('/', methods=['GET', 'POST'])
+@app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == "POST":
-        username = request.form["username"]
-        password = request.form["password"]
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
 
-        # Make sure 'password' exists in your User model!
-        user = User.query.filter_by(username=username, password=password).first()
-        if user:
-            session["user_id"] = user.id
-            flash("Logged in successfully!", "success")
-            return redirect(url_for("index"))
+        session['username'] = username
+
+        if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
+            session['role'] = 'admin'
+            return redirect(url_for('admin_dashboard'))
         else:
-            flash("Invalid username or password", "danger")
-    return render_template("login.html")
+            session['role'] = 'agent'
+            return redirect(url_for('agent_dashboard'))
 
-@app.route("/logout")
-def logout():
-    session.pop("user_id", None)
-    flash("Logged out successfully.", "info")
-    return redirect(url_for("login"))
+    return render_template('login.html')
 
-# ---------- ADD CLIENT ----------
-@app.route("/add_client", methods=["POST"])
-@login_required
-def add_client():
-    name = request.form.get("name")
-    email = request.form.get("email")
-    phone = request.form.get("phone")
-    if name and email:
-        new_client = Client(name=name, email=email, phone=phone)
-        db.session.add(new_client)
-        db.session.commit()
-        flash("Client added successfully!", "success")
-    else:
-        flash("Name and email are required.", "danger")
-    return redirect(url_for("index"))
 
-# ---------- BULK UPLOAD ----------
-@app.route("/upload_clients", methods=["POST"])
-@login_required
+# Admin dashboard
+@app.route('/admin')
+def admin_dashboard():
+    if 'role' not in session or session['role'] != 'admin':
+        flash("Unauthorized access!", "danger")
+        return redirect(url_for('login'))
+    return render_template('admin_dashboard.html', clients=clients)
+
+
+# Agent dashboard
+@app.route('/agent')
+def agent_dashboard():
+    if 'role' not in session or session['role'] != 'agent':
+        flash("Unauthorized access!", "danger")
+        return redirect(url_for('login'))
+    return render_template('agent_dashboard.html', clients=clients)
+
+
+# CSV upload (admin only)
+@app.route('/upload', methods=['POST'])
 def upload_clients():
-    file = request.files.get("file")
-    if not file:
-        flash("No file uploaded.", "danger")
-        return redirect(url_for("index"))
+    if 'role' not in session or session['role'] != 'admin':
+        flash("Unauthorized access!", "danger")
+        return redirect(url_for('login'))
 
-    filename = secure_filename(file.filename)
-    filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+    file = request.files['file']
+    if file.filename == '':
+        flash("No file selected", "danger")
+        return redirect(url_for('admin_dashboard'))
+
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(file.filename))
     file.save(filepath)
 
-    with open(filepath, newline="", encoding="utf-8") as csvfile:
+    # Read CSV and append to clients list
+    with open(filepath, newline='', encoding='utf-8') as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
-            name = row.get("name")
-            email = row.get("email")
-            phone = row.get("phone")
-            if name and email:
-                client = Client(name=name, email=email, phone=phone)
-                db.session.add(client)
-        db.session.commit()
+            clients.append(row)
 
-    flash("Clients imported successfully!", "success")
-    return redirect(url_for("index"))
+    flash("Clients uploaded successfully!", "success")
+    return redirect(url_for('admin_dashboard'))
 
-# ---------- INIT DB ----------
-@app.cli.command("init-db")
-def init_db():
-    """Initialize the database."""
-    db.create_all()
-    print("Database initialized.")
 
-if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()
+# Add client manually (admin only)
+@app.route('/add_client', methods=['POST'])
+def add_client():
+    if 'role' not in session or session['role'] != 'admin':
+        flash("Unauthorized access!", "danger")
+        return redirect(url_for('login'))
+
+    name = request.form['name']
+    email = request.form['email']
+    clients.append({'name': name, 'email': email})
+    flash("Client added successfully!", "success")
+    return redirect(url_for('admin_dashboard'))
+
+
+# Logout
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+
+if __name__ == '__main__':
     app.run(debug=True)
