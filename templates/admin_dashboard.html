@@ -2,43 +2,47 @@
 <html>
 <head>
     <title>Admin Dashboard</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
-    <h1>Welcome, Admin</h1>
+<body class="admin-dashboard">
+    <header>
+        <h1>Welcome, Admin</h1>
+        <a href="{{ url_for('logout') }}" class="btn btn-danger">Logout</a>
+    </header>
 
-    <a href="{{ url_for('logout') }}">Logout</a>
+    <section class="dashboard-section">
+        <h2>Clients</h2>
+        <form method="POST" action="{{ url_for('add_client') }}" class="form-inline">
+            <input type="text" name="name" placeholder="Name" required>
+            <input type="email" name="email" placeholder="Email" required>
+            <input type="text" name="phone" placeholder="Phone">
+            <button type="submit" class="btn btn-success">Add Client</button>
+        </form>
 
-    <h2>Clients</h2>
-    <form method="POST" action="{{ url_for('add_client') }}">
-        <input type="text" name="name" placeholder="Name" required>
-        <input type="email" name="email" placeholder="Email" required>
-        <input type="text" name="phone" placeholder="Phone">
-        <button type="submit">Add Client</button>
-    </form>
+        <form method="POST" action="{{ url_for('import_clients') }}" enctype="multipart/form-data" class="form-inline">
+            <input type="file" name="file" accept=".csv" required>
+            <button type="submit" class="btn btn-warning">Import Clients</button>
+        </form>
 
-    <form method="POST" action="{{ url_for('import_clients') }}" enctype="multipart/form-data">
-        <input type="file" name="file" accept=".csv" required>
-        <button type="submit">Import Clients (CSV)</button>
-    </form>
+        <ul class="client-list">
+            {% for client in clients %}
+                <li>{{ client.name }} - {{ client.email }} - {{ client.phone }}</li>
+            {% endfor %}
+        </ul>
+    </section>
 
-    <ul>
-        {% for client in clients %}
-            <li>{{ client.name }} - {{ client.email }} - {{ client.phone }}</li>
-        {% endfor %}
-    </ul>
+    <section class="dashboard-section">
+        <h2>Create Agent</h2>
+        <form method="POST" action="{{ url_for('create_agent') }}" class="form-inline">
+            <input type="text" name="username" placeholder="Agent Username" required>
+            <button type="submit" class="btn btn-primary">Create Agent</button>
+        </form>
 
-    <h2>Create Agent</h2>
-    <form method="POST" action="{{ url_for('create_agent') }}">
-        <input type="text" name="username" placeholder="Agent Username" required>
-        <button type="submit">Create Agent</button>
-    </form>
-
-    <h3>Existing Agents</h3>
-    <ul>
-        {% for agent in agents %}
-            <li>{{ agent.username }}</li>
-        {% endfor %}
-    </ul>
+        <ul class="agent-list">
+            {% for agent in agents %}
+                <li>{{ agent.username }}</li>
+            {% endfor %}
+        </ul>
+    </section>
 </body>
 </html>
