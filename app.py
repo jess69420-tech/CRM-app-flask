@@ -3,14 +3,13 @@ import csv
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from werkzeug.utils import secure_filename
 from functools import wraps
-from models import db, Client
+from models import db, User, Client
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'yoursecretkey'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///data.db'
 app.config['UPLOAD_FOLDER'] = os.path.join(os.getcwd(), 'uploads')
 
-# Ensure upload folder exists
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
 
@@ -28,7 +27,7 @@ def login_required(f):
     return decorated_function
 
 # -----------------------
-# LOGIN PAGE
+# LOGIN
 # -----------------------
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/login', methods=['GET', 'POST'])
@@ -37,15 +36,18 @@ def login():
         username = request.form.get('username')
         password = request.form.get('password')
 
-        # Hardcoded admin credentials
+        # Admin hardcoded
         if username == 'jess69420' and password == 'jasser/1998J':
             session['role'] = 'admin'
             return redirect(url_for('admin_dashboard'))
-        else:
-            # All other logins are agents
+
+        # Agent check — must exist in DB
+        agent = User.query.filter_by(username=username, role='agent').first()
+        if agent:
             session['role'] = 'agent'
             return redirect(url_for('agent_dashboard'))
 
+        flash("Invalid credentials", "danger")
     return render_template('login.html')
 
 # -----------------------
@@ -57,7 +59,8 @@ def admin_dashboard():
     if session.get('role') != 'admin':
         return redirect(url_for('agent_dashboard'))
     clients = Client.query.all()
-    return render_template('admin_dashboard.html', clients=clients)
+    agents = User.query.filter_by(role='agent').all()
+    return render_template('admin_dashboard.html', clients=clients, agents=agents)
 
 # -----------------------
 # AGENT DASHBOARD
@@ -119,6 +122,31 @@ def import_clients():
         db.session.commit()
 
     flash("Clients imported successfully.", "success")
+    return redirect(url_for('admin_dashboard'))
+
+# -----------------------
+# CREATE AGENT (Admin only)
+# -----------------------
+@app.route('/create_agent', methods=['POST'])
+@login_required
+def create_agent():
+    if session.get('role') != 'admin':
+        flash("Only admins can create agents.", "danger")
+        return redirect(url_for('agent_dashboard'))
+
+    username = request.form.get('username')
+    if username:
+        existing = User.query.filter_by(username=username).first()
+        if existing:
+            flash("Agent already exists.", "danger")
+        else:
+            agent = User(username=username, role='agent')
+            db.session.add(agent)
+            db.session.commit()
+            flash("Agent created successfully.", "success")
+    else:
+        flash("Username is required.", "danger")
+
     return redirect(url_for('admin_dashboard'))
 
 # -----------------------
