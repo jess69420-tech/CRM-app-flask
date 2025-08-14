@@ -1,94 +1,80 @@
 from flask import Flask, render_template, request, redirect, url_for, session
 from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
 import os
-import sqlite3
 
 app = Flask(__name__)
-app.secret_key = "supersecretkey"
+app.secret_key = 'your_secret_key'
 
-# Database configuration
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DB_PATH = os.path.join(BASE_DIR, "instance", "database.db")
-os.makedirs(os.path.join(BASE_DIR, "instance"), exist_ok=True)
-app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-
+# Database config
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///crm.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# ======================
-# MODELS
-# ======================
+# User model
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    password = db.Column(db.String(120), nullable=False)
-    role = db.Column(db.String(20), nullable=False)
+    username = db.Column(db.String(100), nullable=False, unique=True)
+    password = db.Column(db.String(200), nullable=False)
+    role = db.Column(db.String(20), nullable=False)  # 'admin' or 'agent'
 
-# ======================
-# DATABASE RESET CHECK
-# ======================
-def check_and_reset_db():
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("PRAGMA table_info(user)")
-        columns = [col[1] for col in cursor.fetchall()]
-        conn.close()
-
-        if "password" not in columns:
-            print("⚠ Missing 'password' column in 'user' table. Resetting database...")
-            if os.path.exists(DB_PATH):
-                os.remove(DB_PATH)
-            return True
-    except sqlite3.Error as e:
-        print(f"Database error: {e}. Resetting database...")
-        if os.path.exists(DB_PATH):
-            os.remove(DB_PATH)
-        return True
-    return False
-
+# Check if DB needs to be created
 with app.app_context():
-    if check_and_reset_db():
-        print("✅ Database was reset and will be recreated now.")
-
-    db.create_all()
-
-    # Auto-create admin user if not exists
-    if not User.query.filter_by(username="admin").first():
-        admin = User(username="admin", password="admin123", role="admin")
+    try:
+        # Try reading password column
+        db.session.execute(db.select(User.password)).first()
+    except Exception as e:
+        print("⚠ Missing 'password' column. Recreating database...")
+        db.drop_all()
+        db.create_all()
+        # Create default admin
+        admin = User(
+            username="admin",
+            password=generate_password_hash("admin123"),
+            role="admin"
+        )
         db.session.add(admin)
         db.session.commit()
-        print("✅ Default admin created (username: admin, password: admin123)")
+        print("✅ Database recreated with default admin (admin/admin123)")
 
-# ======================
-# ROUTES
-# ======================
+# Routes
+@app.route("/")
+def home():
+    return redirect(url_for("login"))
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         username = request.form["username"]
         password = request.form["password"]
-        user = User.query.filter_by(username=username, password=password).first()
-        if user:
-            session["username"] = user.username
+        user = User.query.filter_by(username=username).first()
+        if user and check_password_hash(user.password, password):
+            session["user_id"] = user.id
             session["role"] = user.role
             if user.role == "admin":
                 return redirect(url_for("admin_dashboard"))
             else:
-                return "Welcome, Agent!"
-        return "Invalid credentials"
+                return redirect(url_for("agent_dashboard"))
+        else:
+            return render_template("login.html", error="Invalid username or password")
     return render_template("login.html")
-
-@app.route("/admin_dashboard")
-def admin_dashboard():
-    if "role" in session and session["role"] == "admin":
-        agents = User.query.filter(User.role == "agent").all()
-        return render_template("admin_dashboard.html", agents=agents)
-    return redirect(url_for("login"))
 
 @app.route("/logout")
 def logout():
     session.clear()
+    return redirect(url_for("login"))
+
+@app.route("/admin_dashboard")
+def admin_dashboard():
+    if "role" in session and session["role"] == "admin":
+        agents = User.query.filter(User.role == 'agent').all()
+        return render_template("admin_dashboard.html", agents=agents)
+    return redirect(url_for("login"))
+
+@app.route("/agent_dashboard")
+def agent_dashboard():
+    if "role" in session and session["role"] == "agent":
+        return render_template("agent_dashboard.html")
     return redirect(url_for("login"))
 
 if __name__ == "__main__":
