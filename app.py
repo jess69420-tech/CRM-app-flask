@@ -4,6 +4,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from io import TextIOWrapper
 import csv
 
+
 # --- Flask setup ---
 app = Flask(__name__)
 app.secret_key = "your_secret_key"  # change this to a secure random key
@@ -114,12 +115,21 @@ def import_clients():
         if file and file.filename.endswith(".csv"):
             csv_file = TextIOWrapper(file, encoding="utf-8")
             reader = csv.DictReader(csv_file)
+
+            required_fields = {"Name", "Email", "Phone"}
+            if not required_fields.issubset(reader.fieldnames or []):
+                return "CSV must have at least 'Name', 'Email' and 'Phone' columns", 400
+
             for row in reader:
-                if not Client.query.filter_by(email=row["email"]).first():
-                    new_client = Client(
-                        name=row["name"], email=row["email"], phone=row.get("phone", "")
-                    )
+                name = row.get("Name")
+                email = row.get("Email")
+                phone = row.get("Phone", "")
+
+                # If no email, we can skip or substitute with empty string
+                if email and not Client.query.filter_by(email=email).first():
+                    new_client = Client(name=name, email=email, phone=phone)
                     db.session.add(new_client)
+
             db.session.commit()
     return redirect(url_for("admin_dashboard"))
 
