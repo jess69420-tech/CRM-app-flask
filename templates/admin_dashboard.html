@@ -1,48 +1,63 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-    <title>Admin Dashboard</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <meta charset="UTF-8">
+  <title>Admin Dashboard</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
 </head>
-<body class="admin-dashboard">
-    <header>
-        <h1>Welcome, Admin</h1>
-        <a href="{{ url_for('logout') }}" class="btn btn-danger">Logout</a>
-    </header>
+<body>
+<div class="container mt-5">
 
-    <section class="dashboard-section">
-        <h2>Clients</h2>
-        <form method="POST" action="{{ url_for('add_client') }}" class="form-inline">
-            <input type="text" name="name" placeholder="Name" required>
-            <input type="email" name="email" placeholder="Email" required>
-            <input type="text" name="phone" placeholder="Phone">
-            <button type="submit" class="btn btn-success">Add Client</button>
-        </form>
+  <h2 class="text-center mb-4">Admin Dashboard</h2>
 
-        <form method="POST" action="{{ url_for('import_clients') }}" enctype="multipart/form-data" class="form-inline">
-            <input type="file" name="file" accept=".csv" required>
-            <button type="submit" class="btn btn-warning">Import Clients</button>
-        </form>
+  <div class="mb-4">
+    <form method="POST" action="{{ url_for('create_agent') }}" class="form-inline">
+      <input type="text" name="username" class="form-control mr-2" placeholder="New agent username" required>
+      <button class="btn btn-success">Create Agent</button>
+    </form>
+  </div>
 
-        <ul class="client-list">
-            {% for client in clients %}
-                <li>{{ client.name }} - {{ client.email }} - {{ client.phone }}</li>
-            {% endfor %}
-        </ul>
-    </section>
+  <div class="mb-4">
+    <form method="POST" action="{{ url_for('import_clients') }}" enctype="multipart/form-data">
+      <div class="form-group">
+        <input type="file" name="file" accept=".csv" required>
+        <button class="btn btn-primary ml-2">Import Clients</button>
+      </div>
+    </form>
+  </div>
 
-    <section class="dashboard-section">
-        <h2>Create Agent</h2>
-        <form method="POST" action="{{ url_for('create_agent') }}" class="form-inline">
-            <input type="text" name="username" placeholder="Agent Username" required>
-            <button type="submit" class="btn btn-primary">Create Agent</button>
-        </form>
+  <h4 class="text-center mt-5 mb-3">Clients</h4>
 
-        <ul class="agent-list">
-            {% for agent in agents %}
-                <li>{{ agent.username }}</li>
-            {% endfor %}
-        </ul>
-    </section>
+  <div class="table-responsive">
+    <table class="table table-bordered text-center">
+      <thead class="thead-light">
+        <tr>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Phone</th>
+          <th>Status</th>
+          <th>Import Date</th>
+          <th>Last Call</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for client in clients %}
+        <tr>
+          <td>
+            <a href="{{ url_for('client_profile', client_id=client.id) }}">{{ client.name }}</a>
+          </td>
+          <td>{{ client.email or 'N/A' }}</td>
+          <td>{{ client.phone or 'N/A' }}</td>
+          <td>{{ client.status or 'NEW' }}</td>
+          <td>{{ client.id | int | date_created }}</td>
+          <td>{{ client.last_contact_date.strftime('%Y-%m-%d %H:%M') if client.last_contact_date else 'Never' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">No clients found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
 </body>
 </html>
