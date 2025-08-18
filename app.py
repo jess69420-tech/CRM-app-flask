@@ -11,6 +11,14 @@ app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///crm.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
 
+@app.template_filter("date_created")
+def date_created_filter(id):
+    # Estimate the import date from the client ID creation timestamp.
+    import datetime
+    # sqlite3 IDs are sequential so this is a guess based on when app was created
+    base_date = datetime.datetime(2025, 1, 1)  # Adjust this to your real start date
+    return (base_date + datetime.timedelta(days=int(id))).strftime('%Y-%m-%d')
+    
 # --- MODELS ---
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
