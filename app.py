@@ -4,10 +4,11 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from io import TextIOWrapper
 from datetime import datetime
 import csv
+import os 
 
 app = Flask(__name__)
 app.secret_key = "your_secret_key"
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///crm.db"
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL").replace("postgres://", "postgresql://", 1)
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
 
