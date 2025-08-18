@@ -2,6 +2,28 @@ from flask import Flask, render_template, request, redirect, url_for, session
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
+import csv
+from io import TextIOWrapper
+
+@app.route("/import_clients", methods=["POST"])
+def import_clients():
+    if "role" in session and session["role"] == "admin":
+        file = request.files["file"]
+        if file and file.filename.endswith(".csv"):
+            csv_file = TextIOWrapper(file, encoding="utf-8")
+            reader = csv.DictReader(csv_file)
+            for row in reader:
+                # Avoid duplicate emails
+                if not Client.query.filter_by(email=row["email"]).first():
+                    new_client = Client(
+                        name=row["name"],
+                        email=row["email"],
+                        phone=row.get("phone", "")
+                    )
+                    db.session.add(new_client)
+            db.session.commit()
+    return redirect(url_for("admin_dashboard"))
+
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'
