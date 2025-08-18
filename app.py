@@ -18,16 +18,22 @@ class User(db.Model):
     password = db.Column(db.String(200), nullable=False)
     role = db.Column(db.String(20), nullable=False)  # 'admin' or 'agent'
 
-# Check if DB needs to be created
+# Client model
+class Client(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), nullable=False, unique=True)
+    phone = db.Column(db.String(20))
+
+# Initialize DB and create default admin
 with app.app_context():
     try:
-        # Try reading password column
         db.session.execute(db.select(User.password)).first()
-    except Exception as e:
-        print("⚠ Missing 'password' column. Recreating database...")
+    except Exception:
+        print("⚠ Recreating database...")
         db.drop_all()
         db.create_all()
-        # Create default admin
+        # Default admin
         admin = User(
             username="admin",
             password=generate_password_hash("admin123"),
@@ -35,7 +41,7 @@ with app.app_context():
         )
         db.session.add(admin)
         db.session.commit()
-        print("✅ Database recreated with default admin (admin/admin123)")
+        print("✅ Database ready. Default admin: admin / admin123")
 
 # Routes
 @app.route("/")
@@ -68,7 +74,8 @@ def logout():
 def admin_dashboard():
     if "role" in session and session["role"] == "admin":
         agents = User.query.filter(User.role == 'agent').all()
-        return render_template("admin_dashboard.html", agents=agents)
+        clients = Client.query.all()
+        return render_template("admin_dashboard.html", agents=agents, clients=clients)
     return redirect(url_for("login"))
 
 @app.route("/agent_dashboard")
@@ -76,6 +83,29 @@ def agent_dashboard():
     if "role" in session and session["role"] == "agent":
         return render_template("agent_dashboard.html")
     return redirect(url_for("login"))
+
+# Add client
+@app.route("/add_client", methods=["POST"])
+def add_client():
+    if "role" in session and session["role"] == "admin":
+        name = request.form["name"]
+        email = request.form["email"]
+        phone = request.form.get("phone")
+        new_client = Client(name=name, email=email, phone=phone)
+        db.session.add(new_client)
+        db.session.commit()
+    return redirect(url_for("admin_dashboard"))
+
+# Create agent
+@app.route("/create_agent", methods=["POST"])
+def create_agent():
+    if "role" in session and session["role"] == "admin":
+        username = request.form["username"]
+        password = generate_password_hash("password123")  # default password
+        new_agent = User(username=username, password=password, role="agent")
+        db.session.add(new_agent)
+        db.session.commit()
+    return redirect(url_for("admin_dashboard"))
 
 if __name__ == "__main__":
     app.run(debug=True)
