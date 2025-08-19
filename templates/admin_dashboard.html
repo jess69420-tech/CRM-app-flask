@@ -4,12 +4,25 @@
   <meta charset="UTF-8">
   <title>Admin Dashboard</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css">
+
+  <style>
+    /* Background colors based on status */
+    .status-new { background-color: #fff3cd !important; }          /* Yellow */
+    .status-no-answer { background-color: #e2e3e5 !important; }    /* Gray */
+    .status-not-interested { background-color: #f8d7da !important; }/* Red */
+    .status-call-again { background-color: #cce5ff !important; }   /* Blue */
+    .status-deposit { background-color: #d4edda !important; }      /* Green */
+  </style>
 </head>
 <body>
 <div class="container mt-5">
 
   <h2 class="text-center mb-4">Admin Dashboard</h2>
 
+  <!-- Create Agent -->
   <div class="mb-4">
     <form method="POST" action="{{ url_for('create_agent') }}" class="form-inline">
       <input type="text" name="username" class="form-control mr-2" placeholder="New agent username" required>
@@ -17,6 +30,7 @@
     </form>
   </div>
 
+  <!-- Import Clients -->
   <div class="mb-4">
     <form method="POST" action="{{ url_for('import_clients') }}" enctype="multipart/form-data">
       <div class="form-group">
@@ -26,10 +40,11 @@
     </form>
   </div>
 
+  <!-- Clients Table -->
   <h4 class="text-center mt-5 mb-3">Clients</h4>
 
   <div class="table-responsive">
-    <table class="table table-bordered text-center">
+    <table id="clientsTable" class="table table-bordered text-center">
       <thead class="thead-light">
         <tr>
           <th>Name</th>
@@ -42,7 +57,14 @@
       </thead>
       <tbody>
         {% for client in clients %}
-        <tr>
+        <tr class="
+          {% if client.status == 'NEW' %}status-new
+          {% elif client.status == 'NO ANSWER' %}status-no-answer
+          {% elif client.status == 'NOT INTERESTED' %}status-not-interested
+          {% elif client.status == 'CALL AGAIN' %}status-call-again
+          {% elif client.status == 'DEPOSIT' %}status-deposit
+          {% endif %}
+        ">
           <td>
             <a href="{{ url_for('client_profile', client_id=client.id) }}">{{ client.name }}</a>
           </td>
@@ -59,5 +81,13 @@
     </table>
   </div>
 </div>
+
+<script>
+  $(document).ready(function() {
+    $('#clientsTable').DataTable({
+      "order": [[ 4, "desc" ]] // Default sort by Import Date
+    });
+  });
+</script>
 </body>
 </html>
